@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>選擇權與期貨損益策略模擬器</title>
+    <title>終極實戰版 - 選擇權價差與 T+0 盤中風控模擬器</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -15,7 +15,7 @@
             --danger-color: #f44336;
             --warning-color: #ff9800;
             --current-color: #ffeb3b;
-            --profit-color: #4caf50;
+            --t0-color: #ff4081; /* T+0 曲線顏色 */
         }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -27,120 +27,65 @@
             flex-direction: column;
             align-items: center;
         }
-        h1 {
-            font-size: 24px;
-            margin-bottom: 20px;
-            color: #fff;
-        }
-        .container {
-            width: 100%;
-            max-width: 1300px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
+        h1 { font-size: 24px; margin-bottom: 20px; color: #fff; }
+        .container { width: 100%; max-width: 1400px; display: flex; flex-direction: column; gap: 20px; }
         .chart-container {
             background-color: var(--panel-bg);
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            position: relative;
-            height: 550px; 
-            width: 100%;
+            padding: 20px; border-radius: 8px; border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); position: relative; height: 600px; width: 100%;
         }
         .controls-wrapper {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 20px;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;
         }
         .control-panel {
-            background-color: var(--panel-bg);
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            background-color: var(--panel-bg); padding: 15px; border-radius: 8px;
+            border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-        .risk-panel {
-            grid-column: 1 / -1; 
-            border-left: 5px solid var(--warning-color);
-        }
+        .risk-panel { grid-column: 1 / -1; border-left: 5px solid var(--warning-color); position: relative; }
+        .bs-panel { grid-column: 1 / -1; border-left: 5px solid var(--t0-color); background: rgba(255, 64, 129, 0.05); }
+        .panel-put { border-top: 3px solid #e91e63; }
+        .panel-call { border-top: 3px solid #03a9f4; }
+        .panel-fut { border-top: 3px solid #8bc34a; }
+        
         .control-panel h3 {
-            margin-top: 0;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid var(--border-color);
-            color: var(--accent-color);
+            margin-top: 0; margin-bottom: 12px; padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color); color: var(--text-color); font-size: 16px;
         }
-        .risk-panel h3 { color: var(--warning-color); }
-        .input-group {
-            margin-bottom: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .risk-panel h3 { color: var(--warning-color); font-size: 18px; display: inline-block; }
+        .bs-panel h3 { color: var(--t0-color); font-size: 18px; }
+        
+        .reset-btn {
+            position: absolute; right: 20px; top: 15px;
+            background-color: var(--danger-color); color: #fff;
+            border: none; padding: 8px 16px; border-radius: 4px;
+            font-size: 14px; font-weight: bold; cursor: pointer;
+            transition: background-color 0.3s;
         }
-        .risk-group {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
+        .reset-btn:hover { background-color: #d32f2f; }
+
+        .input-group { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .risk-group { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
         .risk-group .input-group { flex: 1; min-width: 250px; margin-bottom: 0; }
-        .input-group label {
-            flex: 1;
-            font-size: 14px;
-        }
+        .input-group label { flex: 1; font-size: 13px; }
         .input-group select, .input-group input {
-            flex: 1.2;
-            padding: 6px;
-            background-color: #2c2c2c;
-            color: #fff;
-            border: 1px solid #444;
-            border-radius: 4px;
-            font-size: 14px;
+            flex: 1.2; padding: 5px; background-color: #2c2c2c; color: #fff;
+            border: 1px solid #444; border-radius: 4px; font-size: 13px;
         }
-        .input-group select:focus, .input-group input:focus {
-            outline: none;
-            border-color: var(--accent-color);
-        }
-        .highlight-text {
-            color: var(--current-color);
-            font-weight: bold;
-        }
-        .atr-text {
-            color: var(--warning-color);
-            font-weight: bold;
-        }
+        .input-group select:focus, .input-group input:focus { outline: none; border-color: var(--accent-color); }
+        .highlight-text { color: var(--current-color); font-weight: bold; }
+        .atr-text { color: var(--warning-color); font-weight: bold; }
         .info-box {
-            flex-basis: 100%; 
-            margin-top: 15px; 
-            padding: 15px; 
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
+            flex-basis: 100%; margin-top: 15px; padding: 12px; border-radius: 4px;
+            display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+            background: rgba(255, 152, 0, 0.1); border-left: 4px solid var(--warning-color);
         }
-        .atr-box {
-            background: rgba(255, 152, 0, 0.1); 
-            border-left: 4px solid var(--warning-color); 
-        }
-        .info-box span.title {
-            font-weight: bold;
-            font-size: 15px;
-            margin-right: 10px;
-        }
-        .info-box span.val {
-            color: #fff;
-            font-size: 16px;
-            font-weight: bold;
-            letter-spacing: 0.5px;
-        }
+        .info-box span.title { font-weight: bold; font-size: 14px; margin-right: 10px; color: var(--warning-color);}
+        .info-box span.val { color: #fff; font-size: 14px; font-weight: normal; letter-spacing: 0.5px; line-height: 1.5; }
     </style>
 </head>
 <body>
 
-    <h1>🚀 純淨實戰版 - 進場與停損點標示模擬器</h1>
+    <h1>🚀 終極 T+0 盤中預估與價差風控模擬器</h1>
     
     <div class="container">
         <div class="chart-container">
@@ -150,7 +95,7 @@
         <div class="controls-wrapper">
             <div class="control-panel risk-panel">
                 <h3>📏 全局設定與 ATR 停損雷達</h3>
-                
+                <button class="reset-btn" onclick="resetAllFields()">🧹 全部歸零</button>
                 <div class="risk-group">
                     <div class="input-group">
                         <label class="highlight-text">📍 策略進場點數：</label>
@@ -165,86 +110,68 @@
                         <input type="number" id="atr-mult" value="1.0" step="0.1" oninput="updateChart()">
                     </div>
                 </div>
-
-                <div class="info-box atr-box">
-                    <span class="title" style="color: var(--warning-color);">🛑 停損邊界評估：</span>
+                <div class="info-box">
+                    <span class="title">🛑 停損邊界評估：</span>
                     <span class="val" id="atr-risk-eval">請輸入進場點數與 ATR 值</span>
                 </div>
             </div>
+
+            <div class="control-panel bs-panel">
+                <h3>⏳ Black-Scholes 盤中模擬 (T+0 曲線參數)</h3>
+                <div class="risk-group">
+                    <div class="input-group">
+                        <label>離結算天數 (DTE)：</label>
+                        <input type="number" id="bs-dte" value="5" step="1" min="0" oninput="updateChart()">
+                    </div>
+                    <div class="input-group">
+                        <label>隱含波動率 (IV %)：</label>
+                        <input type="number" id="bs-iv" value="20" step="1" min="1" oninput="updateChart()">
+                    </div>
+                    <div class="input-group">
+                        <label>無風險利率 (%)：</label>
+                        <input type="number" id="bs-rate" value="2" step="0.1" oninput="updateChart()">
+                    </div>
+                </div>
+            </div>
             
-            <div class="control-panel">
+            <div class="control-panel panel-fut">
                 <h3>📈 期貨部位 (Futures)</h3>
-                <div class="input-group">
-                    <label>合約類型：</label>
-                    <select id="fut-type" onchange="updateChart()">
-                        <option value="none" selected>無 (None)</option>
-                        <option value="mini">小台指 (50元/點)</option>
-                        <option value="micro">微台指 (10元/點)</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>方向設定：</label>
-                    <select id="fut-dir" onchange="updateChart()">
-                        <option value="long">做多 (Long)</option>
-                        <option value="short" selected>放空 (Short)</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>進場點數：</label>
-                    <input type="number" id="fut-entry" value="0" step="1" oninput="updateChart()">
-                </div>
-                <div class="input-group">
-                    <label>口數 (Qty)：</label>
-                    <input type="number" id="fut-qty" value="0" min="0" step="1" oninput="updateChart()">
-                </div>
+                <div class="input-group"><label>合約類型：</label><select id="fut-type" onchange="updateChart()"><option value="none" selected>無 (None)</option><option value="mini">小台指 (50元/點)</option><option value="micro">微台指 (10元/點)</option></select></div>
+                <div class="input-group"><label>方向設定：</label><select id="fut-dir" onchange="updateChart()"><option value="long">做多 (Long)</option><option value="short" selected>放空 (Short)</option></select></div>
+                <div class="input-group"><label>進場點數：</label><input type="number" id="fut-entry" value="0" step="1" oninput="updateChart()"></div>
+                <div class="input-group"><label>口數 (Qty)：</label><input type="number" id="fut-qty" value="0" min="0" step="1" oninput="updateChart()"></div>
             </div>
 
-            <div class="control-panel">
-                <h3>🔼 買權部位 (Call - 50元/點)</h3>
-                <div class="input-group">
-                    <label>方向設定：</label>
-                    <select id="call-dir" onchange="updateChart()">
-                        <option value="none" selected>無 (None)</option>
-                        <option value="long">買進 (Buy CALL)</option>
-                        <option value="short">賣出 (Sell CALL)</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>履約價格：</label>
-                    <input type="number" id="call-strike" value="0" step="100" oninput="updateChart()">
-                </div>
-                <div class="input-group">
-                    <label>進場成本(權利金)：</label>
-                    <input type="number" id="call-prem" value="0" step="1" oninput="updateChart()">
-                </div>
-                <div class="input-group">
-                    <label>口數 (Qty)：</label>
-                    <input type="number" id="call-qty" value="0" min="0" step="1" oninput="updateChart()">
-                </div>
+            <div class="control-panel panel-call">
+                <h3 style="color:#03a9f4;">🔼 買權部位 1 (Call 1)</h3>
+                <div class="input-group"><label>方向：</label><select id="call1-dir" onchange="updateChart()"><option value="none" selected>無 (None)</option><option value="long">買進 (Buy CALL)</option><option value="short">賣出 (Sell CALL)</option></select></div>
+                <div class="input-group"><label>履約價：</label><input type="number" id="call1-strike" value="0" step="100" oninput="updateChart()"></div>
+                <div class="input-group"><label>權利金：</label><input type="number" id="call1-prem" value="0" step="1" oninput="updateChart()"></div>
+                <div class="input-group"><label>口數：</label><input type="number" id="call1-qty" value="0" min="0" step="1" oninput="updateChart()"></div>
             </div>
 
-            <div class="control-panel">
-                <h3>🔽 賣權部位 (Put - 50元/點)</h3>
-                <div class="input-group">
-                    <label>方向設定：</label>
-                    <select id="put-dir" onchange="updateChart()">
-                        <option value="none" selected>無 (None)</option>
-                        <option value="long">買進 (Buy PUT)</option>
-                        <option value="short">賣出 (Sell PUT)</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>履約價格：</label>
-                    <input type="number" id="put-strike" value="0" step="100" oninput="updateChart()">
-                </div>
-                <div class="input-group">
-                    <label>進場成本(權利金)：</label>
-                    <input type="number" id="put-prem" value="0" step="1" oninput="updateChart()">
-                </div>
-                <div class="input-group">
-                    <label>口數 (Qty)：</label>
-                    <input type="number" id="put-qty" value="0" min="0" step="1" oninput="updateChart()">
-                </div>
+            <div class="control-panel panel-call">
+                <h3 style="color:#03a9f4;">🔼 買權部位 2 (Call 2)</h3>
+                <div class="input-group"><label>方向：</label><select id="call2-dir" onchange="updateChart()"><option value="none" selected>無 (None)</option><option value="long">買進 (Buy CALL)</option><option value="short">賣出 (Sell CALL)</option></select></div>
+                <div class="input-group"><label>履約價：</label><input type="number" id="call2-strike" value="0" step="100" oninput="updateChart()"></div>
+                <div class="input-group"><label>權利金：</label><input type="number" id="call2-prem" value="0" step="1" oninput="updateChart()"></div>
+                <div class="input-group"><label>口數：</label><input type="number" id="call2-qty" value="0" min="0" step="1" oninput="updateChart()"></div>
+            </div>
+
+            <div class="control-panel panel-put">
+                <h3 style="color:#e91e63;">🔽 賣權部位 1 (Put 1)</h3>
+                <div class="input-group"><label>方向：</label><select id="put1-dir" onchange="updateChart()"><option value="none" selected>無 (None)</option><option value="long">買進 (Buy PUT)</option><option value="short">賣出 (Sell PUT)</option></select></div>
+                <div class="input-group"><label>履約價：</label><input type="number" id="put1-strike" value="0" step="100" oninput="updateChart()"></div>
+                <div class="input-group"><label>權利金：</label><input type="number" id="put1-prem" value="0" step="1" oninput="updateChart()"></div>
+                <div class="input-group"><label>口數：</label><input type="number" id="put1-qty" value="0" min="0" step="1" oninput="updateChart()"></div>
+            </div>
+
+            <div class="control-panel panel-put">
+                <h3 style="color:#e91e63;">🔽 賣權部位 2 (Put 2)</h3>
+                <div class="input-group"><label>方向：</label><select id="put2-dir" onchange="updateChart()"><option value="none" selected>無 (None)</option><option value="long">買進 (Buy PUT)</option><option value="short">賣出 (Sell PUT)</option></select></div>
+                <div class="input-group"><label>履約價：</label><input type="number" id="put2-strike" value="0" step="100" oninput="updateChart()"></div>
+                <div class="input-group"><label>權利金：</label><input type="number" id="put2-prem" value="0" step="1" oninput="updateChart()"></div>
+                <div class="input-group"><label>口數：</label><input type="number" id="put2-qty" value="0" min="0" step="1" oninput="updateChart()"></div>
             </div>
 
         </div>
@@ -254,46 +181,106 @@
         let myChart = null;
         const optMultiplier = 50; 
 
-        function calculatePayoff(ST) {
-            let totalPnL_NTD = 0;
-            const futType = document.getElementById('fut-type').value;
-            const futDir = document.getElementById('fut-dir').value;
-            const futEntry = parseFloat(document.getElementById('fut-entry').value) || 0;
-            const futQty = parseFloat(document.getElementById('fut-qty').value) || 0;
-            if (futType !== 'none' && futQty > 0) {
-                let futMultiplier = (futType === 'mini') ? 50 : 10;
-                let pts = (futDir === 'long') ? (ST - futEntry) : (futEntry - ST);
-                totalPnL_NTD += pts * futMultiplier * futQty;
+        // ==========================================
+        // 數學引擎：常態分配與 Black-Scholes 定價模型
+        // ==========================================
+        function normalCDF(x) {
+            let t = 1 / (1 + 0.2316419 * Math.abs(x));
+            let d = 0.3989423 * Math.exp(-x * x / 2);
+            let prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+            if (x > 0) prob = 1 - prob;
+            return prob;
+        }
+
+        function bsPrice(S, K, t, r, v, isCall) {
+            // 如果已結算 (天數<=0) 或數值異常，返回內含價值
+            if (t <= 0 || S <= 0) return isCall ? Math.max(0, S - K) : Math.max(0, K - S);
+            let d1 = (Math.log(S / K) + (r + v * v / 2) * t) / (v * Math.sqrt(t));
+            let d2 = d1 - v * Math.sqrt(t);
+            if (isCall) {
+                return S * normalCDF(d1) - K * Math.exp(-r * t) * normalCDF(d2);
+            } else {
+                return K * Math.exp(-r * t) * normalCDF(-d2) - S * normalCDF(-d1);
             }
-            const callDir = document.getElementById('call-dir').value;
-            const callStrike = parseFloat(document.getElementById('call-strike').value) || 0;
-            const callPrem = parseFloat(document.getElementById('call-prem').value) || 0;
-            const callQty = parseFloat(document.getElementById('call-qty').value) || 0;
-            if (callDir !== 'none' && callQty > 0) {
-                let callPayoff = Math.max(0, ST - callStrike);
-                let pts = (callDir === 'long') ? (callPayoff - callPrem) : (callPrem - callPayoff);
-                totalPnL_NTD += pts * optMultiplier * callQty;
+        }
+
+        function resetAllFields() {
+            document.getElementById('current-price').value = 0;
+            document.getElementById('atr-points').value = 0;
+            document.getElementById('atr-mult').value = 1.0; 
+            document.getElementById('bs-dte').value = 5;
+            document.getElementById('bs-iv').value = 20;
+            document.getElementById('bs-rate').value = 2;
+            ['fut','call1','call2','put1','put2'].forEach(p => {
+                if(p === 'fut') { document.getElementById(p+'-type').value = 'none'; document.getElementById(p+'-dir').value = 'short'; }
+                else { document.getElementById(p+'-dir').value = 'none'; document.getElementById(p+'-strike').value = 0; }
+                document.getElementById(p+'-entry') ? document.getElementById(p+'-entry').value = 0 : null;
+                document.getElementById(p+'-prem') ? document.getElementById(p+'-prem').value = 0 : null;
+                document.getElementById(p+'-qty').value = 0;
+            });
+            updateChart();
+        }
+
+        // 結算日選擇權損益 (到期 Payoff)
+        function getOptExpPnL(dir, strike, prem, qty, ST, isCall) {
+            if (dir === 'none' || qty <= 0) return 0;
+            let payoff = isCall ? Math.max(0, ST - strike) : Math.max(0, strike - ST);
+            let pts = (dir === 'long') ? (payoff - prem) : (prem - payoff);
+            return pts * optMultiplier * qty;
+        }
+
+        // 盤中 T+0 選擇權損益 (Black-Scholes 價格)
+        function getOptT0PnL(dir, strike, prem, qty, ST, isCall, t, r, v) {
+            if (dir === 'none' || qty <= 0) return 0;
+            let currentTheoryPrice = bsPrice(ST, strike, t, r, v, isCall);
+            let pts = (dir === 'long') ? (currentTheoryPrice - prem) : (prem - currentTheoryPrice);
+            return pts * optMultiplier * qty;
+        }
+
+        // 核心計算：整合期貨與選擇權
+        function calculateTotalPnL(ST, isT0) {
+            let totalPnL = 0;
+            
+            // 期貨 (盤中與結算視為一致)
+            const fType = document.getElementById('fut-type').value;
+            const fDir = document.getElementById('fut-dir').value;
+            const fEntry = parseFloat(document.getElementById('fut-entry').value) || 0;
+            const fQty = parseFloat(document.getElementById('fut-qty').value) || 0;
+            if (fType !== 'none' && fQty > 0) {
+                let m = (fType === 'mini') ? 50 : 10;
+                let pts = (fDir === 'long') ? (ST - fEntry) : (fEntry - ST);
+                totalPnL += pts * m * fQty;
             }
-            const putDir = document.getElementById('put-dir').value;
-            const putStrike = parseFloat(document.getElementById('put-strike').value) || 0;
-            const putPrem = parseFloat(document.getElementById('put-prem').value) || 0;
-            const putQty = parseFloat(document.getElementById('put-qty').value) || 0;
-            if (putDir !== 'none' && putQty > 0) {
-                let putPayoff = Math.max(0, putStrike - ST);
-                let pts = (putDir === 'long') ? (putPayoff - putPrem) : (putPrem - putPayoff);
-                totalPnL_NTD += pts * optMultiplier * putQty;
+
+            if (!isT0) {
+                totalPnL += getOptExpPnL(document.getElementById('call1-dir').value, parseFloat(document.getElementById('call1-strike').value)||0, parseFloat(document.getElementById('call1-prem').value)||0, parseFloat(document.getElementById('call1-qty').value)||0, ST, true);
+                totalPnL += getOptExpPnL(document.getElementById('call2-dir').value, parseFloat(document.getElementById('call2-strike').value)||0, parseFloat(document.getElementById('call2-prem').value)||0, parseFloat(document.getElementById('call2-qty').value)||0, ST, true);
+                totalPnL += getOptExpPnL(document.getElementById('put1-dir').value, parseFloat(document.getElementById('put1-strike').value)||0, parseFloat(document.getElementById('put1-prem').value)||0, parseFloat(document.getElementById('put1-qty').value)||0, ST, false);
+                totalPnL += getOptExpPnL(document.getElementById('put2-dir').value, parseFloat(document.getElementById('put2-strike').value)||0, parseFloat(document.getElementById('put2-prem').value)||0, parseFloat(document.getElementById('put2-qty').value)||0, ST, false);
+            } else {
+                // T+0 理論參數
+                let dte = parseFloat(document.getElementById('bs-dte').value) || 0;
+                let t = dte / 365.0;
+                let r = (parseFloat(document.getElementById('bs-rate').value) || 0) / 100.0;
+                let v = (parseFloat(document.getElementById('bs-iv').value) || 20) / 100.0;
+                
+                totalPnL += getOptT0PnL(document.getElementById('call1-dir').value, parseFloat(document.getElementById('call1-strike').value)||0, parseFloat(document.getElementById('call1-prem').value)||0, parseFloat(document.getElementById('call1-qty').value)||0, ST, true, t, r, v);
+                totalPnL += getOptT0PnL(document.getElementById('call2-dir').value, parseFloat(document.getElementById('call2-strike').value)||0, parseFloat(document.getElementById('call2-prem').value)||0, parseFloat(document.getElementById('call2-qty').value)||0, ST, true, t, r, v);
+                totalPnL += getOptT0PnL(document.getElementById('put1-dir').value, parseFloat(document.getElementById('put1-strike').value)||0, parseFloat(document.getElementById('put1-prem').value)||0, parseFloat(document.getElementById('put1-qty').value)||0, ST, false, t, r, v);
+                totalPnL += getOptT0PnL(document.getElementById('put2-dir').value, parseFloat(document.getElementById('put2-strike').value)||0, parseFloat(document.getElementById('put2-prem').value)||0, parseFloat(document.getElementById('put2-qty').value)||0, ST, false, t, r, v);
             }
-            return totalPnL_NTD;
+
+            return totalPnL;
         }
 
         const tacticalLinesPlugin = {
             id: 'tacticalLines',
             afterDraw: (chart) => {
-                const currentPrice = parseFloat(document.getElementById('current-price').value);
-                const atrPoints = parseFloat(document.getElementById('atr-points').value) || 0;
+                const curPrice = parseFloat(document.getElementById('current-price').value);
+                const atrPts = parseFloat(document.getElementById('atr-points').value) || 0;
                 const atrMult = parseFloat(document.getElementById('atr-mult').value) || 0;
                 
-                if (!currentPrice || currentPrice === 0) return; 
+                if (!curPrice || curPrice === 0) return; 
                 
                 const xAxis = chart.scales.x;
                 const yAxis = chart.scales.y;
@@ -302,230 +289,102 @@
                 function drawVLine(xVal, color, labelText, yOffset) {
                     if (xVal >= xAxis.min && xVal <= xAxis.max) {
                         const x = xAxis.getPixelForValue(xVal);
-                        ctx.save();
-                        ctx.beginPath();
-                        ctx.setLineDash([5, 5]);
-                        ctx.moveTo(x, yAxis.top);
-                        ctx.lineTo(x, yAxis.bottom);
-                        ctx.lineWidth = 2;
-                        ctx.strokeStyle = color; 
-                        ctx.stroke();
-                        
-                        ctx.fillStyle = color;
-                        const textWidth = ctx.measureText(labelText).width + 16;
-                        ctx.fillRect(x - textWidth/2, yAxis.top + yOffset - 18, textWidth, 22);
-                        
+                        ctx.save(); ctx.beginPath(); ctx.setLineDash([5, 5]);
+                        ctx.moveTo(x, yAxis.top); ctx.lineTo(x, yAxis.bottom);
+                        ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.stroke();
+                        ctx.fillStyle = color; const textW = ctx.measureText(labelText).width + 16;
+                        ctx.fillRect(x - textW/2, yAxis.top + yOffset - 18, textW, 22);
                         ctx.fillStyle = (color === '#ffeb3b') ? '#000' : '#fff';
-                        ctx.textAlign = 'center';
-                        ctx.font = 'bold 13px Arial';
-                        ctx.fillText(labelText, x, yAxis.top + yOffset - 3);
-                        ctx.restore();
+                        ctx.textAlign = 'center'; ctx.font = 'bold 13px Arial';
+                        ctx.fillText(labelText, x, yAxis.top + yOffset - 3); ctx.restore();
                     }
                 }
 
-                function drawIntersectionDot(stValue, labelPrefix) {
-                    if (stValue >= xAxis.min && stValue <= xAxis.max) {
-                        const pnl = calculatePayoff(stValue);
-                        const x = xAxis.getPixelForValue(stValue);
-                        const y = yAxis.getPixelForValue(pnl);
-
-                        ctx.save();
-                        ctx.beginPath();
-                        ctx.arc(x, y, 6, 0, 2 * Math.PI);
-                        ctx.fillStyle = pnl >= 0 ? '#4caf50' : '#f44336';
-                        ctx.fill();
-                        ctx.lineWidth = 2;
-                        ctx.strokeStyle = '#fff';
-                        ctx.stroke();
-
-                        const sign = pnl >= 0 ? '+' : '';
-                        const text = `${labelPrefix}出場: ${sign}${pnl.toLocaleString()} 元`;
-                        ctx.font = 'bold 13px Arial';
-                        const textWidth = ctx.measureText(text).width + 16;
-                        
-                        let labelX = x + 12;
-                        if (labelX + textWidth > chart.width) {
-                            labelX = x - textWidth - 12;
-                        }
-                        const labelY = y - 10;
-
-                        ctx.fillStyle = 'rgba(30, 30, 30, 0.9)';
-                        ctx.fillRect(labelX, labelY - 16, textWidth, 24);
-                        
-                        ctx.strokeStyle = pnl >= 0 ? '#4caf50' : '#f44336';
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(labelX, labelY - 16, textWidth, 24);
-
-                        ctx.fillStyle = pnl >= 0 ? '#4caf50' : '#f44336';
-                        ctx.textAlign = 'left';
-                        ctx.fillText(text, labelX + 8, labelY);
-                        ctx.restore();
-                    }
-                }
-
-                drawVLine(currentPrice, '#ffeb3b', '📍 策略進場點', 0);
-
-                if (atrPoints > 0 && atrMult > 0) {
-                    const atrDist = atrPoints * atrMult;
-                    const lowerBound = currentPrice - atrDist;
-                    const upperBound = currentPrice + atrDist;
-
-                    drawVLine(lowerBound, '#ff9800', `🛑 下檔停損點`, 28);
-                    drawVLine(upperBound, '#ff9800', `🛑 上檔停損/停利`, 28);
-
-                    const fType = document.getElementById('fut-type').value;
-                    const cDir = document.getElementById('call-dir').value;
-                    const pDir = document.getElementById('put-dir').value;
-                    if (fType !== 'none' || cDir !== 'none' || pDir !== 'none') {
-                        drawIntersectionDot(lowerBound, '🛑 ');
-                        drawIntersectionDot(upperBound, '🛑 ');
-                    }
+                drawVLine(curPrice, '#ffeb3b', '📍 策略進場點', 0);
+                if (atrPts > 0 && atrMult > 0) {
+                    const lb = curPrice - (atrPts * atrMult); const ub = curPrice + (atrPts * atrMult);
+                    drawVLine(lb, '#ff9800', `🛑 下檔停損點`, 28); drawVLine(ub, '#ff9800', `🛑 上檔停損/停利`, 28);
                 }
             }
         };
 
-        function formatNTD(val) {
-            const sign = val >= 0 ? '+' : '';
-            return sign + val.toLocaleString() + ' 元';
-        }
+        function formatNTD(val) { return (val >= 0 ? '+' : '') + val.toLocaleString() + ' 元'; }
 
         function updateChart() {
-            const currentPrice = parseFloat(document.getElementById('current-price').value) || 0;
-            const atrPoints = parseFloat(document.getElementById('atr-points').value) || 0;
-            const atrMult = parseFloat(document.getElementById('atr-mult').value) || 0;
+            const cur = parseFloat(document.getElementById('current-price').value) || 0;
+            const atr = parseFloat(document.getElementById('atr-points').value) || 0;
+            const mult = parseFloat(document.getElementById('atr-mult').value) || 0;
 
-            const fType = document.getElementById('fut-type').value;
-            const cDir = document.getElementById('call-dir').value;
-            const pDir = document.getElementById('put-dir').value;
-            const hasPosition = !(fType === 'none' && cDir === 'none' && pDir === 'none');
+            const hasPos = (document.getElementById('fut-type').value !== 'none' || 
+                            document.getElementById('call1-dir').value !== 'none' || document.getElementById('call2-dir').value !== 'none' ||
+                            document.getElementById('put1-dir').value !== 'none' || document.getElementById('put2-dir').value !== 'none');
             
-            if (!hasPosition) {
+            // 更新風險評估文字 (同時顯示結算與T+0)
+            if (!hasPos) {
                 document.getElementById('atr-risk-eval').innerHTML = "請先建立部位";
+            } else if (cur > 0 && atr > 0 && mult > 0) {
+                const lb = cur - (atr * mult); const ub = cur + (atr * mult);
+                
+                const lPnlExp = calculateTotalPnL(lb, false); 
+                const uPnlExp = calculateTotalPnL(ub, false);
+                const lPnlT0 = calculateTotalPnL(lb, true); 
+                const uPnlT0 = calculateTotalPnL(ub, true);
+
+                document.getElementById('atr-risk-eval').innerHTML = 
+                    `<div style="margin-bottom: 5px;"><strong>[📉 跌至下檔停損 ${lb.toLocaleString()}]</strong> ➡️ 結算若在此: <span style="color:${lPnlExp>=0?'#4caf50':'#f44336'};">${formatNTD(lPnlExp)}</span> ｜ <span style="color:var(--t0-color);">盤中立刻砍倉 (T+0): ${formatNTD(lPnlT0)}</span></div>` +
+                    `<div><strong>[📈 漲至上檔停損 ${ub.toLocaleString()}]</strong> ➡️ 結算若在此: <span style="color:${uPnlExp>=0?'#4caf50':'#f44336'};">${formatNTD(uPnlExp)}</span> ｜ <span style="color:var(--t0-color);">盤中立刻砍倉 (T+0): ${formatNTD(uPnlT0)}</span></div>`;
             } else {
-                if (currentPrice > 0 && atrPoints > 0 && atrMult > 0) {
-                    const atrDist = atrPoints * atrMult;
-                    const lowerBound = currentPrice - atrDist;
-                    const upperBound = currentPrice + atrDist;
-                    const lowerPnL = calculatePayoff(lowerBound);
-                    const upperPnL = calculatePayoff(upperBound);
-                    
-                    document.getElementById('atr-risk-eval').innerHTML = 
-                        `跌至下檔停損 (${lowerBound.toLocaleString()}): <span style="color:${lowerPnL>=0?'#4caf50':'#f44336'};">${formatNTD(lowerPnL)}</span>  |  ` +
-                        `漲至上檔停損 (${upperBound.toLocaleString()}): <span style="color:${upperPnL>=0?'#4caf50':'#f44336'};">${formatNTD(upperPnL)}</span>`;
-                } else {
-                    document.getElementById('atr-risk-eval').innerHTML = "請輸入進場點數與 ATR 值";
-                }
+                document.getElementById('atr-risk-eval').innerHTML = "請輸入進場點數與 ATR 值";
             }
 
-            let activePrices = [];
-            if (currentPrice > 0) {
-                activePrices.push(currentPrice);
-                if (atrPoints > 0 && atrMult > 0) {
-                    activePrices.push(currentPrice - (atrPoints * atrMult));
-                    activePrices.push(currentPrice + (atrPoints * atrMult));
-                }
-            }
-            if (fType !== 'none') activePrices.push(parseFloat(document.getElementById('fut-entry').value) || 0);
-            if (cDir !== 'none') activePrices.push(parseFloat(document.getElementById('call-strike').value) || 0);
-            if (pDir !== 'none') activePrices.push(parseFloat(document.getElementById('put-strike').value) || 0);
+            // 抓取 X 軸範圍
+            let act = [];
+            if (cur > 0) { act.push(cur); if (atr > 0 && mult > 0) { act.push(cur - atr*mult); act.push(cur + atr*mult); } }
+            if (document.getElementById('fut-type').value !== 'none') act.push(parseFloat(document.getElementById('fut-entry').value) || 0);
+            if (document.getElementById('call1-dir').value !== 'none') act.push(parseFloat(document.getElementById('call1-strike').value) || 0);
+            if (document.getElementById('call2-dir').value !== 'none') act.push(parseFloat(document.getElementById('call2-strike').value) || 0);
+            if (document.getElementById('put1-dir').value !== 'none') act.push(parseFloat(document.getElementById('put1-strike').value) || 0);
+            if (document.getElementById('put2-dir').value !== 'none') act.push(parseFloat(document.getElementById('put2-strike').value) || 0);
             
-            activePrices = activePrices.filter(p => p > 0);
-
-            let minPrice, maxPrice;
-            if (activePrices.length === 0) {
-                minPrice = 0;
-                maxPrice = 10000;
-            } else {
-                let currentMin = Math.min(...activePrices);
-                let currentMax = Math.max(...activePrices);
-                minPrice = currentMin - 2000;
-                maxPrice = currentMax + 2000;
-                if (minPrice < 0) minPrice = 0;
+            act = act.filter(p => p > 0);
+            let minP = 0, maxP = 10000;
+            if (act.length > 0) {
+                minP = Math.max(0, Math.min(...act) - 2000); maxP = Math.max(...act) + 2000;
             }
 
-            const labels = [];
-            const dataPnL = [];
-            const dataZero = [];
-
-            for (let i = minPrice; i <= maxPrice; i += 50) {
-                labels.push(i);
-                dataPnL.push(calculatePayoff(i));
-                dataZero.push(0); 
+            const lbls = [], dPnlExp = [], dPnlT0 = [], dZero = [];
+            for (let i = minP; i <= maxP; i += 50) { 
+                lbls.push(i); 
+                dPnlExp.push(calculateTotalPnL(i, false)); 
+                dPnlT0.push(calculateTotalPnL(i, true)); 
+                dZero.push(0); 
             }
 
             if (myChart) myChart.destroy();
-
             const ctx = document.getElementById('payoffChart').getContext('2d');
             myChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels,
+                    labels: lbls,
                     datasets: [
-                        {
-                            label: '組合總損益 (NTD)',
-                            data: dataPnL,
-                            borderColor: '#4fc3f7',
-                            backgroundColor: 'rgba(79, 195, 247, 0.15)',
-                            borderWidth: 2,
-                            fill: true,
-                            pointRadius: 0, 
-                            pointHitRadius: 15
-                        },
-                        {
-                            label: '損益兩平線',
-                            data: dataZero,
-                            borderColor: '#f44336',
-                            borderWidth: 1,
-                            borderDash: [5, 5],
-                            fill: false,
-                            pointRadius: 0,
-                            pointHitRadius: 0
-                        }
+                        { label: '結算日損益 (Expiration)', data: dPnlExp, borderColor: '#4fc3f7', backgroundColor: 'rgba(79, 195, 247, 0.1)', borderWidth: 2, fill: true, pointRadius: 0, pointHitRadius: 10 },
+                        { label: '盤中理論損益 (T+0)', data: dPnlT0, borderColor: '#ff4081', borderDash: [5, 5], backgroundColor: 'transparent', borderWidth: 2, fill: false, pointRadius: 0, pointHitRadius: 10 },
+                        { label: '損益兩平線', data: dZero, borderColor: '#f44336', borderWidth: 1, borderDash: [2, 4], fill: false, pointRadius: 0, pointHitRadius: 0 }
                     ]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    layout: { padding: { top: 35, right: 30, left: 30 } },
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        tooltip: {
-                            callbacks: {
-                                title: function(context) { return '大盤結算價: ' + context[0].label + ' 點'; },
-                                label: function(context) {
-                                    if (context.datasetIndex === 1) return null; 
-                                    return '總損益: ' + formatNTD(context.raw);
-                                }
-                            }
-                        },
-                        legend: { labels: { color: '#e0e0e0' } }
-                    },
+                    responsive: true, maintainAspectRatio: false, layout: { padding: { top: 35, right: 30, left: 30 } },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { tooltip: { callbacks: { title: ctx => '大盤點數: ' + ctx[0].label + ' 點', label: ctx => ctx.datasetIndex===2?null: ctx.dataset.label + ': ' + formatNTD(ctx.raw) } }, legend: { labels: { color: '#e0e0e0' } } },
                     scales: {
-                        x: {
-                            grid: { color: '#333' },
-                            ticks: { color: '#aaa', maxTicksLimit: 15 },
-                            title: { display: true, text: '大盤結算價 (點)', color: '#fff', font: { size: 14 } }
-                        },
-                        y: {
-                            grid: { color: '#333' },
-                            ticks: { 
-                                color: '#aaa',
-                                callback: function(value) { return value.toLocaleString() + ' 元'; }
-                            },
-                            title: { display: true, text: '總損益 (新台幣 NTD)', color: '#fff', font: { size: 14 } }
-                        }
+                        x: { grid: { color: '#333' }, ticks: { color: '#aaa', maxTicksLimit: 15 }, title: { display: true, text: '大盤點數', color: '#fff' } },
+                        y: { grid: { color: '#333' }, ticks: { color: '#aaa', callback: v => v.toLocaleString() + ' 元' }, title: { display: true, text: '總損益 (NTD)', color: '#fff' } }
                     }
                 },
                 plugins: [tacticalLinesPlugin] 
             });
         }
-
-        window.onload = function() {
-            updateChart();
-        };
+        window.onload = updateChart;
     </script>
 </body>
 </html>
