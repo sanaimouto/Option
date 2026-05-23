@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>選擇權與期貨損益策略模擬器</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --accent-color: #4fc3f7; 
+            --border-color: #333;
+            --danger-color: #f44336;
+            --warning-color: #ff9800;
+            --current-color: #ffeb3b;
+            --profit-color: #4caf50;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+        .container {
+            width: 100%;
+            max-width: 1300px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .chart-container {
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            position: relative;
+            height: 550px; 
+            width: 100%;
+        }
+        .controls-wrapper {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        .control-panel {
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .risk-panel {
+            grid-column: 1 / -1; 
+            border-left: 5px solid var(--warning-color);
+        }
+        .control-panel h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--accent-color);
+        }
+        .risk-panel h3 { color: var(--warning-color); }
+        .input-group {
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .risk-group {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .risk-group .input-group { flex: 1; min-width: 250px; margin-bottom: 0; }
+        .input-group label {
+            flex: 1;
+            font-size: 14px;
+        }
+        .input-group select, .input-group input {
+            flex: 1.2;
+            padding: 6px;
+            background-color: #2c2c2c;
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .input-group select:focus, .input-group input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+        .highlight-text {
+            color: var(--current-color);
+            font-weight: bold;
+        }
+        .atr-text {
+            color: var(--warning-color);
+            font-weight: bold;
+        }
+        .info-box {
+            flex-basis: 100%; 
+            margin-top: 15px; 
+            padding: 15px; 
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .atr-box {
+            background: rgba(255, 152, 0, 0.1); 
+            border-left: 4px solid var(--warning-color); 
+        }
+        .info-box span.title {
+            font-weight: bold;
+            font-size: 15px;
+            margin-right: 10px;
+        }
+        .info-box span.val {
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 純淨實戰版 - 進場與停損點標示模擬器</h1>
+    
+    <div class="container">
+        <div class="chart-container">
+            <canvas id="payoffChart"></canvas>
+        </div>
+
+        <div class="controls-wrapper">
+            <div class="control-panel risk-panel">
+                <h3>📏 全局設定與 ATR 停損雷達</h3>
+                
+                <div class="risk-group">
+                    <div class="input-group">
+                        <label class="highlight-text">📍 策略進場點數：</label>
+                        <input type="number" id="current-price" value="0" step="1" oninput="updateChart()">
+                    </div>
+                    <div class="input-group">
+                        <label class="atr-text">📏 日均震幅 (ATR)：</label>
+                        <input type="number" id="atr-points" value="0" step="1" oninput="updateChart()">
+                    </div>
+                    <div class="input-group">
+                        <label class="atr-text">✖️ 停損倍數：</label>
+                        <input type="number" id="atr-mult" value="1.0" step="0.1" oninput="updateChart()">
+                    </div>
+                </div>
+
+                <div class="info-box atr-box">
+                    <span class="title" style="color: var(--warning-color);">🛑 停損邊界評估：</span>
+                    <span class="val" id="atr-risk-eval">請輸入進場點數與 ATR 值</span>
+                </div>
+            </div>
+            
+            <div class="control-panel">
+                <h3>📈 期貨部位 (Futures)</h3>
+                <div class="input-group">
+                    <label>合約類型：</label>
+                    <select id="fut-type" onchange="updateChart()">
+                        <option value="none" selected>無 (None)</option>
+                        <option value="mini">小台指 (50元/點)</option>
+                        <option value="micro">微台指 (10元/點)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>方向設定：</label>
+                    <select id="fut-dir" onchange="updateChart()">
+                        <option value="long">做多 (Long)</option>
+                        <option value="short" selected>放空 (Short)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>進場點數：</label>
+                    <input type="number" id="fut-entry" value="0" step="1" oninput="updateChart()">
+                </div>
+                <div class="input-group">
+                    <label>口數 (Qty)：</label>
+                    <input type="number" id="fut-qty" value="0" min="0" step="1" oninput="updateChart()">
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h3>🔼 買權部位 (Call - 50元/點)</h3>
+                <div class="input-group">
+                    <label>方向設定：</label>
+                    <select id="call-dir" onchange="updateChart()">
+                        <option value="none" selected>無 (None)</option>
+                        <option value="long">買進 (Buy CALL)</option>
+                        <option value="short">賣出 (Sell CALL)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>履約價格：</label>
+                    <input type="number" id="call-strike" value="0" step="100" oninput="updateChart()">
+                </div>
+                <div class="input-group">
+                    <label>進場成本(權利金)：</label>
+                    <input type="number" id="call-prem" value="0" step="1" oninput="updateChart()">
+                </div>
+                <div class="input-group">
+                    <label>口數 (Qty)：</label>
+                    <input type="number" id="call-qty" value="0" min="0" step="1" oninput="updateChart()">
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h3>🔽 賣權部位 (Put - 50元/點)</h3>
+                <div class="input-group">
+                    <label>方向設定：</label>
+                    <select id="put-dir" onchange="updateChart()">
+                        <option value="none" selected>無 (None)</option>
+                        <option value="long">買進 (Buy PUT)</option>
+                        <option value="short">賣出 (Sell PUT)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>履約價格：</label>
+                    <input type="number" id="put-strike" value="0" step="100" oninput="updateChart()">
+                </div>
+                <div class="input-group">
+                    <label>進場成本(權利金)：</label>
+                    <input type="number" id="put-prem" value="0" step="1" oninput="updateChart()">
+                </div>
+                <div class="input-group">
+                    <label>口數 (Qty)：</label>
+                    <input type="number" id="put-qty" value="0" min="0" step="1" oninput="updateChart()">
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let myChart = null;
+        const optMultiplier = 50; 
+
+        function calculatePayoff(ST) {
+            let totalPnL_NTD = 0;
+            const futType = document.getElementById('fut-type').value;
+            const futDir = document.getElementById('fut-dir').value;
+            const futEntry = parseFloat(document.getElementById('fut-entry').value) || 0;
+            const futQty = parseFloat(document.getElementById('fut-qty').value) || 0;
+            if (futType !== 'none' && futQty > 0) {
+                let futMultiplier = (futType === 'mini') ? 50 : 10;
+                let pts = (futDir === 'long') ? (ST - futEntry) : (futEntry - ST);
+                totalPnL_NTD += pts * futMultiplier * futQty;
+            }
+            const callDir = document.getElementById('call-dir').value;
+            const callStrike = parseFloat(document.getElementById('call-strike').value) || 0;
+            const callPrem = parseFloat(document.getElementById('call-prem').value) || 0;
+            const callQty = parseFloat(document.getElementById('call-qty').value) || 0;
+            if (callDir !== 'none' && callQty > 0) {
+                let callPayoff = Math.max(0, ST - callStrike);
+                let pts = (callDir === 'long') ? (callPayoff - callPrem) : (callPrem - callPayoff);
+                totalPnL_NTD += pts * optMultiplier * callQty;
+            }
+            const putDir = document.getElementById('put-dir').value;
+            const putStrike = parseFloat(document.getElementById('put-strike').value) || 0;
+            const putPrem = parseFloat(document.getElementById('put-prem').value) || 0;
+            const putQty = parseFloat(document.getElementById('put-qty').value) || 0;
+            if (putDir !== 'none' && putQty > 0) {
+                let putPayoff = Math.max(0, putStrike - ST);
+                let pts = (putDir === 'long') ? (putPayoff - putPrem) : (putPrem - putPayoff);
+                totalPnL_NTD += pts * optMultiplier * putQty;
+            }
+            return totalPnL_NTD;
+        }
+
+        const tacticalLinesPlugin = {
+            id: 'tacticalLines',
+            afterDraw: (chart) => {
+                const currentPrice = parseFloat(document.getElementById('current-price').value);
+                const atrPoints = parseFloat(document.getElementById('atr-points').value) || 0;
+                const atrMult = parseFloat(document.getElementById('atr-mult').value) || 0;
+                
+                if (!currentPrice || currentPrice === 0) return; 
+                
+                const xAxis = chart.scales.x;
+                const yAxis = chart.scales.y;
+                const ctx = chart.ctx;
+
+                function drawVLine(xVal, color, labelText, yOffset) {
+                    if (xVal >= xAxis.min && xVal <= xAxis.max) {
+                        const x = xAxis.getPixelForValue(xVal);
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.setLineDash([5, 5]);
+                        ctx.moveTo(x, yAxis.top);
+                        ctx.lineTo(x, yAxis.bottom);
+                        ctx.lineWidth = 2;
+                        ctx.strokeStyle = color; 
+                        ctx.stroke();
+                        
+                        ctx.fillStyle = color;
+                        const textWidth = ctx.measureText(labelText).width + 16;
+                        ctx.fillRect(x - textWidth/2, yAxis.top + yOffset - 18, textWidth, 22);
+                        
+                        ctx.fillStyle = (color === '#ffeb3b') ? '#000' : '#fff';
+                        ctx.textAlign = 'center';
+                        ctx.font = 'bold 13px Arial';
+                        ctx.fillText(labelText, x, yAxis.top + yOffset - 3);
+                        ctx.restore();
+                    }
+                }
+
+                function drawIntersectionDot(stValue, labelPrefix) {
+                    if (stValue >= xAxis.min && stValue <= xAxis.max) {
+                        const pnl = calculatePayoff(stValue);
+                        const x = xAxis.getPixelForValue(stValue);
+                        const y = yAxis.getPixelForValue(pnl);
+
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.arc(x, y, 6, 0, 2 * Math.PI);
+                        ctx.fillStyle = pnl >= 0 ? '#4caf50' : '#f44336';
+                        ctx.fill();
+                        ctx.lineWidth = 2;
+                        ctx.strokeStyle = '#fff';
+                        ctx.stroke();
+
+                        const sign = pnl >= 0 ? '+' : '';
+                        const text = `${labelPrefix}出場: ${sign}${pnl.toLocaleString()} 元`;
+                        ctx.font = 'bold 13px Arial';
+                        const textWidth = ctx.measureText(text).width + 16;
+                        
+                        let labelX = x + 12;
+                        if (labelX + textWidth > chart.width) {
+                            labelX = x - textWidth - 12;
+                        }
+                        const labelY = y - 10;
+
+                        ctx.fillStyle = 'rgba(30, 30, 30, 0.9)';
+                        ctx.fillRect(labelX, labelY - 16, textWidth, 24);
+                        
+                        ctx.strokeStyle = pnl >= 0 ? '#4caf50' : '#f44336';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(labelX, labelY - 16, textWidth, 24);
+
+                        ctx.fillStyle = pnl >= 0 ? '#4caf50' : '#f44336';
+                        ctx.textAlign = 'left';
+                        ctx.fillText(text, labelX + 8, labelY);
+                        ctx.restore();
+                    }
+                }
+
+                drawVLine(currentPrice, '#ffeb3b', '📍 策略進場點', 0);
+
+                if (atrPoints > 0 && atrMult > 0) {
+                    const atrDist = atrPoints * atrMult;
+                    const lowerBound = currentPrice - atrDist;
+                    const upperBound = currentPrice + atrDist;
+
+                    drawVLine(lowerBound, '#ff9800', `🛑 下檔停損點`, 28);
+                    drawVLine(upperBound, '#ff9800', `🛑 上檔停損/停利`, 28);
+
+                    const fType = document.getElementById('fut-type').value;
+                    const cDir = document.getElementById('call-dir').value;
+                    const pDir = document.getElementById('put-dir').value;
+                    if (fType !== 'none' || cDir !== 'none' || pDir !== 'none') {
+                        drawIntersectionDot(lowerBound, '🛑 ');
+                        drawIntersectionDot(upperBound, '🛑 ');
+                    }
+                }
+            }
+        };
+
+        function formatNTD(val) {
+            const sign = val >= 0 ? '+' : '';
+            return sign + val.toLocaleString() + ' 元';
+        }
+
+        function updateChart() {
+            const currentPrice = parseFloat(document.getElementById('current-price').value) || 0;
+            const atrPoints = parseFloat(document.getElementById('atr-points').value) || 0;
+            const atrMult = parseFloat(document.getElementById('atr-mult').value) || 0;
+
+            const fType = document.getElementById('fut-type').value;
+            const cDir = document.getElementById('call-dir').value;
+            const pDir = document.getElementById('put-dir').value;
+            const hasPosition = !(fType === 'none' && cDir === 'none' && pDir === 'none');
+            
+            if (!hasPosition) {
+                document.getElementById('atr-risk-eval').innerHTML = "請先建立部位";
+            } else {
+                if (currentPrice > 0 && atrPoints > 0 && atrMult > 0) {
+                    const atrDist = atrPoints * atrMult;
+                    const lowerBound = currentPrice - atrDist;
+                    const upperBound = currentPrice + atrDist;
+                    const lowerPnL = calculatePayoff(lowerBound);
+                    const upperPnL = calculatePayoff(upperBound);
+                    
+                    document.getElementById('atr-risk-eval').innerHTML = 
+                        `跌至下檔停損 (${lowerBound.toLocaleString()}): <span style="color:${lowerPnL>=0?'#4caf50':'#f44336'};">${formatNTD(lowerPnL)}</span>  |  ` +
+                        `漲至上檔停損 (${upperBound.toLocaleString()}): <span style="color:${upperPnL>=0?'#4caf50':'#f44336'};">${formatNTD(upperPnL)}</span>`;
+                } else {
+                    document.getElementById('atr-risk-eval').innerHTML = "請輸入進場點數與 ATR 值";
+                }
+            }
+
+            let activePrices = [];
+            if (currentPrice > 0) {
+                activePrices.push(currentPrice);
+                if (atrPoints > 0 && atrMult > 0) {
+                    activePrices.push(currentPrice - (atrPoints * atrMult));
+                    activePrices.push(currentPrice + (atrPoints * atrMult));
+                }
+            }
+            if (fType !== 'none') activePrices.push(parseFloat(document.getElementById('fut-entry').value) || 0);
+            if (cDir !== 'none') activePrices.push(parseFloat(document.getElementById('call-strike').value) || 0);
+            if (pDir !== 'none') activePrices.push(parseFloat(document.getElementById('put-strike').value) || 0);
+            
+            activePrices = activePrices.filter(p => p > 0);
+
+            let minPrice, maxPrice;
+            if (activePrices.length === 0) {
+                minPrice = 0;
+                maxPrice = 10000;
+            } else {
+                let currentMin = Math.min(...activePrices);
+                let currentMax = Math.max(...activePrices);
+                minPrice = currentMin - 2000;
+                maxPrice = currentMax + 2000;
+                if (minPrice < 0) minPrice = 0;
+            }
+
+            const labels = [];
+            const dataPnL = [];
+            const dataZero = [];
+
+            for (let i = minPrice; i <= maxPrice; i += 50) {
+                labels.push(i);
+                dataPnL.push(calculatePayoff(i));
+                dataZero.push(0); 
+            }
+
+            if (myChart) myChart.destroy();
+
+            const ctx = document.getElementById('payoffChart').getContext('2d');
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '組合總損益 (NTD)',
+                            data: dataPnL,
+                            borderColor: '#4fc3f7',
+                            backgroundColor: 'rgba(79, 195, 247, 0.15)',
+                            borderWidth: 2,
+                            fill: true,
+                            pointRadius: 0, 
+                            pointHitRadius: 15
+                        },
+                        {
+                            label: '損益兩平線',
+                            data: dataZero,
+                            borderColor: '#f44336',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0,
+                            pointHitRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 35, right: 30, left: 30 } },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) { return '大盤結算價: ' + context[0].label + ' 點'; },
+                                label: function(context) {
+                                    if (context.datasetIndex === 1) return null; 
+                                    return '總損益: ' + formatNTD(context.raw);
+                                }
+                            }
+                        },
+                        legend: { labels: { color: '#e0e0e0' } }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#333' },
+                            ticks: { color: '#aaa', maxTicksLimit: 15 },
+                            title: { display: true, text: '大盤結算價 (點)', color: '#fff', font: { size: 14 } }
+                        },
+                        y: {
+                            grid: { color: '#333' },
+                            ticks: { 
+                                color: '#aaa',
+                                callback: function(value) { return value.toLocaleString() + ' 元'; }
+                            },
+                            title: { display: true, text: '總損益 (新台幣 NTD)', color: '#fff', font: { size: 14 } }
+                        }
+                    }
+                },
+                plugins: [tacticalLinesPlugin] 
+            });
+        }
+
+        window.onload = function() {
+            updateChart();
+        };
+    </script>
+</body>
+</html>
