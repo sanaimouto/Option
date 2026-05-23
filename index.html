@@ -86,10 +86,12 @@
 </head>
 <body>
 
-    <h1>🚀 終極 T+0 盤中預估與智慧停利模擬器</h1>
+    <h1>🚀 終極 T+0 盤中預估與智慧停利模擬器 (波段視野進化版)</h1>
     
     <div class="container">
-        <div class="chart-container"><canvas id="payoffChart"></canvas></div>
+        <div class="chart-container">
+            <canvas id="payoffChart"></canvas>
+        </div>
 
         <div class="controls-wrapper">
             <div class="control-panel risk-panel">
@@ -179,6 +181,7 @@
         let myChart = null;
         const optMultiplier = 50; 
 
+        // 數學引擎：常態分配與 Black-Scholes 定價模型
         function normalCDF(x) {
             let t = 1 / (1 + 0.2316419 * Math.abs(x));
             let d = 0.3989423 * Math.exp(-x * x / 2);
@@ -228,6 +231,8 @@
 
         function calculateTotalPnL(ST, isT0) {
             let totalPnL = 0;
+            
+            // 處理期貨微台(10)與小台(50)的點值差異
             const fType = document.getElementById('fut-type').value;
             const fDir = document.getElementById('fut-dir').value;
             const fEntry = parseFloat(document.getElementById('fut-entry').value) || 0;
@@ -257,7 +262,7 @@
             return totalPnL;
         }
 
-        // 🧠 核心 AI 結構掃描：找出真實的最佳停利點
+        // 🧠 核心 AI 結構掃描：找出真實的最佳停利點 (視野解放與動態語意版)
         function getSmartBounds(cur, lb, ub) {
             let activeStrikes = [];
             ['call1', 'call2', 'put1', 'put2'].forEach(p => {
@@ -267,30 +272,31 @@
                 }
             });
             
-            let smartUb = ub, ubLabel = '🛑 上檔停損', ubColor = '#ff9800';
-            let smartLb = lb, lbLabel = '🛑 下檔停損', lbColor = '#ff9800';
+            // 語意自動修正：如果碰到這條線是賺錢的，就不該叫停損
+            let pUb = calculateTotalPnL(ub, false);
+            let pLb = calculateTotalPnL(lb, false);
+            let smartUb = ub, ubLabel = pUb >= 0 ? '📈 上檔動能觀察' : '🛑 上檔停損', ubColor = pUb >= 0 ? '#03a9f4' : '#ff9800';
+            let smartLb = lb, lbLabel = pLb >= 0 ? '📉 下檔動能觀察' : '🛑 下檔停損', lbColor = pLb >= 0 ? '#03a9f4' : '#ff9800';
             
             const pnlCur = calculateTotalPnL(cur, false);
 
-            // 往上掃描尋找獲利山峰
-            let uStrikes = activeStrikes.filter(k => k > cur && k <= ub).sort((a,b)=>a-b);
+            // 往上掃描尋找獲利山峰 (移除距離限制)
+            let uStrikes = activeStrikes.filter(k => k > cur).sort((a,b)=>a-b);
             for (let k of uStrikes) {
                 let pK = calculateTotalPnL(k, false);
-                let pUb = calculateTotalPnL(ub, false);
-                // 如果山峰利潤大於現在，且大於死守到底(ATR界線)，就在這停利！
-                if (pK > pnlCur && pK > pUb) {
-                    smartUb = k; ubLabel = '🎯 結構停利點'; ubColor = '#4caf50';
+                // 只要山峰的利潤大於現在，且大於 ATR 邊界，就自動釘上停利線
+                if (pK > pnlCur && pK >= pUb) {
+                    smartUb = k; ubLabel = '🎯 結構停利峰值'; ubColor = '#4caf50';
                     break;
                 }
             }
 
-            // 往下掃描尋找獲利山峰 (適用於 Covered Put 等)
-            let dStrikes = activeStrikes.filter(k => k < cur && k >= lb).sort((a,b)=>b-a);
+            // 往下掃描尋找獲利山峰 (移除距離限制)
+            let dStrikes = activeStrikes.filter(k => k < cur).sort((a,b)=>b-a);
             for (let k of dStrikes) {
                 let pK = calculateTotalPnL(k, false);
-                let pLb = calculateTotalPnL(lb, false);
-                if (pK > pnlCur && pK > pLb) {
-                    smartLb = k; lbLabel = '🎯 結構停利點'; lbColor = '#4caf50';
+                if (pK > pnlCur && pK >= pLb) {
+                    smartLb = k; lbLabel = '🎯 結構停利峰值'; lbColor = '#4caf50';
                     break;
                 }
             }
@@ -355,8 +361,8 @@
                 const uPnlT0 = calculateTotalPnL(bounds.smartUb, true);
 
                 document.getElementById('atr-risk-eval').innerHTML = 
-                    `<div style="margin-bottom: 5px;"><strong>[📉 跌至 ${bounds.smartLb.toLocaleString()} (${bounds.lbLabel.replace('🎯 ','').replace('🛑 ','')})]</strong> ➡️ 結算若在此: <span style="color:${lPnlExp>=0?'#4caf50':'#f44336'};">${formatNTD(lPnlExp)}</span> ｜ <span style="color:var(--t0-color);">盤中立刻砍倉 (T+0): ${formatNTD(lPnlT0)}</span></div>` +
-                    `<div><strong>[📈 漲至 ${bounds.smartUb.toLocaleString()} (${bounds.ubLabel.replace('🎯 ','').replace('🛑 ','')})]</strong> ➡️ 結算若在此: <span style="color:${uPnlExp>=0?'#4caf50':'#f44336'};">${formatNTD(uPnlExp)}</span> ｜ <span style="color:var(--t0-color);">盤中立刻砍倉 (T+0): ${formatNTD(uPnlT0)}</span></div>`;
+                    `<div style="margin-bottom: 5px;"><strong>[📉 跌至 ${bounds.smartLb.toLocaleString()} (${bounds.lbLabel.replace('🎯 ','').replace('🛑 ','').replace('📈 ','').replace('📉 ','')})]</strong> ➡️ 結算若在此: <span style="color:${lPnlExp>=0?'#4caf50':'#f44336'};">${formatNTD(lPnlExp)}</span> ｜ <span style="color:var(--t0-color);">盤中砍倉 (T+0): ${formatNTD(lPnlT0)}</span></div>` +
+                    `<div><strong>[📈 漲至 ${bounds.smartUb.toLocaleString()} (${bounds.ubLabel.replace('🎯 ','').replace('🛑 ','').replace('📈 ','').replace('📉 ','')})]</strong> ➡️ 結算若在此: <span style="color:${uPnlExp>=0?'#4caf50':'#f44336'};">${formatNTD(uPnlExp)}</span> ｜ <span style="color:var(--t0-color);">盤中砍倉 (T+0): ${formatNTD(uPnlT0)}</span></div>`;
             } else {
                 document.getElementById('atr-risk-eval').innerHTML = "請輸入進場點數與 ATR 值";
             }
